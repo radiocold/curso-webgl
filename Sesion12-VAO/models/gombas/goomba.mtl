@@ -1,0 +1,6 @@
+newmtl body
+Ns 96.078431
+Kd 0.470588 0.470588 0.470588
+d 1.000000
+illum 2
+map_Kd body1.png

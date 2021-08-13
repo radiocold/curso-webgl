@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script type="text/javascript" src="m4.js"></script>
+        <script type="text/javascript" src="ShaderProgram.js"></script>
+        <script type="text/javascript" src="shaders/MainShader.js"></script>
+        <script type="text/javascript" src="shaders/ColorShader.js"></script>
+        <script type="text/javascript" src="shaders/PixelShader.js"></script>
+    </head>
+
+    <body onload="start();">
+        <canvas width="640" height="480" id="webglCanvas"></canvas>
+
+        <script type="text/javascript">
+
+            var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+                                        window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+            window.requestAnimationFrame = requestAnimationFrame;
+
+            var gl;
+            var canvas;
+
+            var vbo_position;
+            var vbo_color;
+            var vbo_texture;
+
+            var vbo_position_fbo;
+            var vbo_texture_fbo;
+
+            var model1_position = [0, 0 ,0];
+            var model1_angle = 0;
+
+            var plane_texture;
+            var is_end_load_texture = false;
+
+            var main_shader_program = null;
+            var color_shader_program = null;
+
+            var texture_fbo = null;
+            var fbo = null;
+
+            var factor_effect = 1.0;
+
+            function start() {
+                canvas = document.getElementById("webglCanvas");    
+                gl = canvas.getContext("webgl2");
+
+                if (!gl) {
+                    console.log("No se pudo iniciar Webgl");
+                }
+
+                console.log(gl.getParameter(gl.VERSION));
+                console.log(gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+
+                main_shader_program = new MainShader();
+                color_shader_program = new PixelShader();
+
+                // Creacion de VBO's
+                vbo_position = gl.createBuffer();
+                if (!vbo_position) {
+                    console.log("Error al crear vbo position");
+                    return;
+                }
+
+                var positions = new Float32Array([ 0.5 , 0.5,0,
+                                                  -0.5, -0.5,0,
+                                                   0.5, -0.5,0,
+                                                
+                                                   0.5 , 0.5,0,
+                                                  -0.5, -0.5,0,
+                                                  -0.5,  0.5,0,
+                                                ]);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position);
+                gl.bufferData(gl.ARRAY_BUFFER , positions , gl.STATIC_DRAW);
+
+                vbo_color = gl.createBuffer();
+                if (!vbo_color) {
+                    console.log("Error al crear vbo color");
+                    return;
+                }
+
+                var colors = new Float32Array([1 , 0, 0,
+                                               0 , 1, 0,
+                                               0 , 0, 1]);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbo_color);
+                gl.bufferData(gl.ARRAY_BUFFER , colors , gl.STATIC_DRAW);
+
+                vbo_texture = gl.createBuffer();
+                if (!vbo_texture) {
+                    console.log("Error al crear vbo texture");
+                    return;
+                }
+
+                var texture_coord = new Float32Array([
+                    1.0 , 0.0,
+                    0.0 , 1.0,
+                    1.0 , 1.0,
+
+                    1.0, 0.0,
+                    0.0, 1.0,
+                    0.0, 0.0
+                    
+                ]);
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbo_texture);
+                gl.bufferData(gl.ARRAY_BUFFER , texture_coord , gl.STATIC_DRAW);
+
+                plane_texture = gl.createTexture();
+                var plane_image = new Image();
+                plane_image.onload = function() {
+                    handleTextureLoaded(plane_image, plane_texture);
+                }
+                plane_image.src = "jhonny_bravo.png";
+
+
+                // FBO VBO's
+                var positions_fbo = new Float32Array(
+                    [ 1.0, 1.0,
+                     -1.0, -1.0,
+                      1.0, -1.0,
+                    
+                      1.0, 1.0,
+                     -1.0, -1.0,
+                     -1.0,  1.0]
+                );
+
+                vbo_position_fbo = gl.createBuffer();
+                if (!vbo_position_fbo) {
+                    console.log("Error al crear vbo position fbo");
+                    return;
+                }
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position_fbo);
+                gl.bufferData(gl.ARRAY_BUFFER , positions_fbo , gl.STATIC_DRAW);
+
+
+                var texture_coord_fbo = new Float32Array([
+                    canvas.clientWidth/1024 , 0.0,
+                    0.0 , canvas.clientHeight/1024,
+                    canvas.clientWidth/1024 , canvas.clientHeight/1024,
+
+                    canvas.clientWidth/1024, 0.0,
+                    0.0, canvas.clientHeight/1024,
+                    0.0, 0.0
+                 ]);
+
+                vbo_texture_fbo = gl.createBuffer();
+                if (!vbo_texture_fbo) {
+                    console.log("Error al crear vbo texture fbo");
+                    return;
+                }
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbo_texture_fbo);
+                gl.bufferData(gl.ARRAY_BUFFER , texture_coord_fbo , gl.STATIC_DRAW);
+
+                texture_fbo = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D , texture_fbo);
+                gl.texImage2D(gl.TEXTURE_2D , 0 , gl.RGBA , 1024 , 1024 , 0 , gl.RGBA , gl.UNSIGNED_BYTE , null);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+                fbo = gl.createFramebuffer();
+                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+                gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture_fbo, 0);
+                gl.bindTexture(gl.TEXTURE_2D , null);
+
+                draw();
+
+            }
+
+            function handleTextureLoaded(image , texture) {
+
+                gl.bindTexture(gl.TEXTURE_2D , texture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.bindTexture(gl.TEXTURE_2D , null);
+                is_end_load_texture = true;
+            }
+
+            function draw() {
+                console.log("draw");
+
+
+                if (is_end_load_texture) {
+
+                    main_shader_program.use();
+                    gl.bindFramebuffer(gl.FRAMEBUFFER , fbo);
+
+                    gl.clearColor(0, 0, 0, 1);
+                    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position);
+                    gl.vertexAttribPointer(main_shader_program.in_position_loc, 3, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(main_shader_program.in_position_loc);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_color);
+                    gl.vertexAttribPointer(main_shader_program.in_color_loc, 3, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(main_shader_program.in_color_loc);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_texture);
+                    gl.vertexAttribPointer(main_shader_program.in_texture_loc, 2, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(main_shader_program.in_texture_loc);
+
+                    model1_angle += 0.01;
+                    // fieldOfViewInRadians, aspect, near, far
+                    var proj = m4.perspective(57 * Math.PI / 180 , 
+                            canvas.clientWidth / canvas.clientHeight , 0.1 , 100);
+                    gl.uniformMatrix4fv(main_shader_program.u_proj_loc , false , proj);
+
+                    var view = m4.translation(0 , 0 , 5);
+                    view = m4.inverse(view);
+                    gl.uniformMatrix4fv(main_shader_program.u_view_loc , false , view);
+
+                    // T * R * S
+                    var model = m4.translation(model1_position[0] , model1_position[1] , model1_position[2]);
+                    model = m4.multiply(model, m4.xRotation(model1_angle));
+                    model = m4.multiply(model, m4.scaling(3 , 3 , 1));
+
+                    gl.uniformMatrix4fv(main_shader_program.u_model_loc , false , model);
+
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D , plane_texture);
+                    gl.uniform1i(main_shader_program.u_sampler_loc, 0);
+
+                    gl.drawArrays(gl.TRIANGLES,  0 , 6);
+
+
+                    // Pintar el plano de la textura del FBO en la pantalla final
+                    gl.bindFramebuffer(gl.FRAMEBUFFER , null);
+
+                    color_shader_program.use();
+
+                    gl.clearColor(0, 0, 0, 1);
+                    gl.clear(gl.COLOR_BUFFER_BIT| gl.DEPTH_BUFFER_BIT);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position_fbo);
+                    gl.vertexAttribPointer(color_shader_program.in_position_loc, 2, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(color_shader_program.in_position_loc);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_texture_fbo);
+                    gl.vertexAttribPointer(color_shader_program.in_texture_loc, 2, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(color_shader_program.in_texture_loc);
+
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D , texture_fbo);
+                    gl.uniform1i(color_shader_program.u_sampler_loc , 0);
+
+                    factor_effect *= 0.995;
+                    factor_effect = Math.max(0.1 , factor_effect);
+
+                    gl.uniform1f(color_shader_program.u_factor_loc , factor_effect);
+
+                    gl.drawArrays(gl.TRIANGLES,  0 , 6);
+
+                }
+
+                requestAnimationFrame(draw);
+            }
+
+        </script>
+
+    </body>
+</html>

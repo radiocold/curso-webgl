@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script type="text/javascript" src="lib/m4.js"></script>
+        <script type="text/javascript" src="lib/ShaderProgram.js"></script>
+        <script type="text/javascript" src="lib/webgl-obj.js"></script>
+        <script type="text/javascript" src="shaders/MainShader.js"></script>
+        <script type="text/javascript" src="shaders/PhongShader.js"></script>
+    </head>
+
+    <body onload="start();">
+        <canvas width="640" height="480" id="webglCanvas"></canvas>
+
+        <script type="text/javascript">
+
+            var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+                                        window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+            window.requestAnimationFrame = requestAnimationFrame;
+
+            var gl;
+            var canvas;
+
+            var main_shader_program = null;
+
+            var keypress = [];
+
+            var camera_yaw = 0;
+            var camera_pitch = 0;
+            var camera_position = [0 , 0 , 5];
+
+            var textures = null;
+
+            var meshes = [];
+
+            function start() {
+                canvas = document.getElementById("webglCanvas");    
+                gl = canvas.getContext("webgl2");
+
+                if (!gl) {
+                    console.log("No se pudo iniciar Webgl");
+                }
+
+                console.log(gl.getParameter(gl.VERSION));
+                console.log(gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+
+                main_shader_program = new PhongShader();
+
+
+                window.addEventListener("keydown" , onKeyDown.bind(this));
+                window.addEventListener("keyup" , onKeyUp.bind(this));
+
+                loadResources().then( () => {
+                    draw();
+                });
+            }
+
+            async function loadResources() {
+                // Interpretamos el archivo .obj a arreglos
+                let response = await fetch("models/garfield/garfield.obj");
+                let text = await response.text();
+                let obj = parseOBJ(text);
+                console.log(obj);
+
+                // Cargamos las texturas del modelo
+                var materials_lib = [];
+                for (var l in obj.materialLibs) {
+                    let response = await fetch("models/garfield/" + obj.materialLibs[l]);
+                    let text = await response.text();
+                    let objlib = parseLib(text);
+                    materials_lib.push(objlib);
+                    console.log(objlib);
+                }
+
+                textures = [];
+                for (var m in materials_lib) {
+                    var material = materials_lib[m];
+                    for (var l in material) {
+                        var submat = material[l];
+                        var texture = null;
+                        try {
+                            texture = await loadTexture("models/garfield/" + submat.map_Kd , true);
+                        } catch (e) {
+                            console.error(e);
+                        }
+                        textures[l] = texture;
+                    }
+                }
+
+                console.log(textures);
+
+                // Crear VBO's
+                for (var g = 0; g < obj.geometries.length; g++) {
+
+                    var geometry = obj.geometries[g];
+
+                    var vao = gl.createVertexArray();
+                    gl.bindVertexArray(vao);
+
+                    var vbo_position = gl.createBuffer();
+                    if (!vbo_position) {
+                        console.log("Error create vbo position");
+                        return;
+                    }
+                    gl.bindBuffer(gl.ARRAY_BUFFER , vbo_position);
+                    gl.bufferData(gl.ARRAY_BUFFER , new Float32Array(geometry.data.position) , gl.STATIC_DRAW);
+
+
+                    var vbo_texture_coord = gl.createBuffer();
+                    if (!vbo_texture_coord) {
+                        console.log("Error create  vbo texture coord");
+                        return;
+                    }
+                    gl.bindBuffer(gl.ARRAY_BUFFER , vbo_texture_coord);
+                    gl.bufferData(gl.ARRAY_BUFFER , new Float32Array(geometry.data.texcoord) , gl.STATIC_DRAW);
+
+                    var vbo_normal = gl.createBuffer();
+                    if (!vbo_normal) {
+                        console.log("Error create  vbo normal");
+                        return;
+                    }
+                    gl.bindBuffer(gl.ARRAY_BUFFER , vbo_normal);
+                    gl.bufferData(gl.ARRAY_BUFFER , new Float32Array(geometry.data.normal) , gl.STATIC_DRAW);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position);
+                    gl.vertexAttribPointer(main_shader_program.in_position_loc, 3, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(main_shader_program.in_position_loc);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_texture_coord);
+                    gl.vertexAttribPointer(main_shader_program.in_texture_loc, 2, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(main_shader_program.in_texture_loc);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_normal);
+                    gl.vertexAttribPointer(main_shader_program.in_normal_loc, 3, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(main_shader_program.in_normal_loc);
+
+                    meshes.push({"vao" : vao, "material" : geometry.material , "count_vertices" : geometry.data.position.length});
+
+                    gl.bindVertexArray(null);
+                }
+            }
+
+            function onKeyDown(e) {
+                keypress[e.keyCode] = true;
+            }
+
+            function onKeyUp(e) {
+                delete keypress[e.keyCode];
+            }
+
+            function draw() {
+                console.log("draw");
+                var cvx = 0;
+                var cvz = 0;
+
+                if (keypress[81]) { // Q
+                    camera_yaw += 0.01; 
+                }
+
+                if (keypress[69]) { // E
+                    camera_yaw -= 0.01; 
+                }
+
+                if (keypress[38]) { // FLECHA ARRIBA
+                    camera_pitch += 0.01; 
+                }
+
+                if (keypress[40]) { // FLECHA ARRIBA
+                    camera_pitch -= 0.01; 
+                }
+
+                if (keypress[65]) { // TECLA A
+                    cvx = -0.1;
+                }
+
+                if (keypress[68]) { // TECLA D
+                    cvx = 0.1;
+                }
+
+                if (keypress[87]) { // TECLA W
+                    cvz = 0.1;
+                }
+
+                if (keypress[83]) { // TECLA S
+                    cvz = -0.1;
+                }
+
+
+                main_shader_program.use();
+
+                gl.clearColor(0, 0, 0, 1);
+                gl.enable(gl.DEPTH_TEST);
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+                // fieldOfViewInRadians, aspect, near, far
+                var proj = m4.perspective(57 * Math.PI / 180 , 
+                        canvas.clientWidth / canvas.clientHeight , 0.1 , 100);
+                gl.uniformMatrix4fv(main_shader_program.u_proj_loc , false , proj);
+
+                // view = T * R
+                var view = m4.multiply(m4.yRotation(camera_yaw) ,  m4.xRotation(camera_pitch) );
+                view = m4.multiply( m4.translation(camera_position[0] , camera_position[1] , camera_position[2]) , view );
+
+                var vright = m4.vectorMultiply([1,0,0,0] , view);
+
+                if (cvx != 0) {
+                    camera_position[0] += vright[0] * cvx;
+                    camera_position[1] += vright[1] * cvx;
+                    camera_position[2] += vright[2] * cvx;
+                }
+
+                var vforward = m4.vectorMultiply([0,0,-1,0] , view);
+
+                if (cvz != 0) {
+                    camera_position[0] += vforward[0] * cvz;
+                    camera_position[1] += vforward[1] * cvz;
+                    camera_position[2] += vforward[2] * cvz;
+                }
+
+                view = m4.inverse(view);
+                gl.uniformMatrix4fv(main_shader_program.u_view_loc , false , view);
+
+                gl.uniform3fv(main_shader_program.u_camera_pos_world_loc , camera_position);
+
+
+                // draw meshes
+                for (var m = 0; m < meshes.length; m++) {
+                    var mesh = meshes[m];
+
+                    gl.bindVertexArray(mesh.vao);
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D , textures[mesh.material]);
+                    gl.uniform1i(main_shader_program.u_sampler_loc, 0);
+
+                    var model = m4.translation(0, 0 , 0);
+                    model = m4.multiply(model, m4.scaling(0.05 , 0.05 , 0.05));
+
+                    gl.uniformMatrix4fv(main_shader_program.u_model_loc , false , model);
+                    gl.drawArrays(gl.TRIANGLES,  0 , mesh.count_vertices);
+
+                    gl.bindVertexArray(null);
+
+                }
+
+                requestAnimationFrame(draw);
+            }
+
+        </script>
+
+    </body>
+</html>

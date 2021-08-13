@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+    <body onload="start();">
+        <canvas width="640" height="480" id="webglCanvas"></canvas>
+
+        <script type="text/javascript">
+
+            var gl;
+            var canvas;
+
+            function start() {
+                canvas = document.getElementById("webglCanvas");    
+                gl = canvas.getContext("webgl2");
+
+                if (!gl) {
+                    console.log("No se pudo iniciar Webgl");
+                }
+
+                console.log(gl.getParameter(gl.VERSION));
+                console.log(gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+                
+                gl.clearColor(0, 0, 0, 1);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                
+
+            }
+
+        </script>
+
+    </body>
+</html>

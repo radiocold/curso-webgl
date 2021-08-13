@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script type="text/javascript" src="lib/m4.js"></script>
+        <script type="text/javascript" src="lib/ShaderProgram.js"></script>
+        <script type="text/javascript" src="lib/webgl-obj.js"></script>
+        <script type="text/javascript" src="shaders/MainShader.js"></script>
+    </head>
+
+    <body onload="start();">
+        <canvas width="640" height="480" id="webglCanvas"></canvas>
+
+        <script type="text/javascript">
+
+            var requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+                                        window.webkitRequestAnimationFrame || window.msRequestAnimationFrame;
+            window.requestAnimationFrame = requestAnimationFrame;
+
+            var gl;
+            var canvas;
+
+            var vbo_position;
+            var vbo_color;
+            var vbo_texture;
+
+            var model1_position = [0, 0 ,0];
+            var model1_angle = 0;
+
+            var plane_texture;
+            var is_end_load_texture = false;
+
+            var main_shader_program = null;
+
+            var keypress = [];
+
+            var camera_yaw = 0;
+            var camera_pitch = 0;
+            var camera_position = [0 , 0 , 5];
+
+            function start() {
+                canvas = document.getElementById("webglCanvas");    
+                gl = canvas.getContext("webgl2");
+
+                if (!gl) {
+                    console.log("No se pudo iniciar Webgl");
+                }
+
+                console.log(gl.getParameter(gl.VERSION));
+                console.log(gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+
+                main_shader_program = new MainShader();
+
+                // Creacion de VBO's
+                vbo_position = gl.createBuffer();
+                if (!vbo_position) {
+                    console.log("Error al crear vbo position");
+                    return;
+                }
+
+                var positions = new Float32Array([ 0.5 , 0.5,0,
+                                                  -0.5, -0.5,0,
+                                                   0.5, -0.5,0,
+                                                
+                                                   0.5 , 0.5,0,
+                                                  -0.5, -0.5,0,
+                                                  -0.5,  0.5,0,
+                                                ]);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position);
+                gl.bufferData(gl.ARRAY_BUFFER , positions , gl.STATIC_DRAW);
+
+                vbo_color = gl.createBuffer();
+                if (!vbo_color) {
+                    console.log("Error al crear vbo color");
+                    return;
+                }
+
+                var colors = new Float32Array([1 , 0, 0,
+                                               0 , 1, 0,
+                                               0 , 0, 1]);
+                
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbo_color);
+                gl.bufferData(gl.ARRAY_BUFFER , colors , gl.STATIC_DRAW);
+
+                vbo_texture = gl.createBuffer();
+                if (!vbo_texture) {
+                    console.log("Error al crear vbo texture");
+                    return;
+                }
+
+                var texture_coord = new Float32Array([
+                    1.0 , 0.0,
+                    0.0 , 1.0,
+                    1.0 , 1.0,
+
+                    1.0, 0.0,
+                    0.0, 1.0,
+                    0.0, 0.0
+                    
+                ]);
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbo_texture);
+                gl.bufferData(gl.ARRAY_BUFFER , texture_coord , gl.STATIC_DRAW);
+
+                plane_texture = gl.createTexture();
+                var plane_image = new Image();
+                plane_image.onload = function() {
+                    handleTextureLoaded(plane_image, plane_texture);
+                }
+                plane_image.src = "img/jhonny_bravo.png";
+
+                window.addEventListener("keydown" , onKeyDown.bind(this));
+                window.addEventListener("keyup" , onKeyUp.bind(this));
+
+                draw();
+
+            }
+
+            function onKeyDown(e) {
+                keypress[e.keyCode] = true;
+            }
+
+            function onKeyUp(e) {
+                delete keypress[e.keyCode];
+            }
+
+
+            function handleTextureLoaded(image , texture) {
+
+                gl.bindTexture(gl.TEXTURE_2D , texture);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.bindTexture(gl.TEXTURE_2D , null);
+                is_end_load_texture = true;
+            }
+
+            function draw() {
+                console.log("draw");
+                var cvx = 0;
+                var cvz = 0;
+
+                if (keypress[81]) { // Q
+                    camera_yaw += 0.01; 
+                }
+
+                if (keypress[69]) { // E
+                    camera_yaw -= 0.01; 
+                }
+
+                if (keypress[38]) { // FLECHA ARRIBA
+                    camera_pitch += 0.01; 
+                }
+
+                if (keypress[40]) { // FLECHA ARRIBA
+                    camera_pitch -= 0.01; 
+                }
+
+                if (keypress[65]) { // TECLA A
+                    cvx = -0.1;
+                }
+
+                if (keypress[68]) { // TECLA D
+                    cvx = 0.1;
+                }
+
+                if (keypress[87]) { // TECLA W
+                    cvz = 0.1;
+                }
+
+                if (keypress[83]) { // TECLA S
+                    cvz = -0.1;
+                }
+
+                if (is_end_load_texture) {
+
+                    main_shader_program.use();
+
+                    gl.clearColor(0, 0, 0, 1);
+                    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_position);
+                    gl.vertexAttribPointer(main_shader_program.in_position_loc, 3, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(main_shader_program.in_position_loc);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_color);
+                    gl.vertexAttribPointer(main_shader_program.in_color_loc, 3, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(main_shader_program.in_color_loc);
+
+                    gl.bindBuffer(gl.ARRAY_BUFFER, vbo_texture);
+                    gl.vertexAttribPointer(main_shader_program.in_texture_loc, 2, gl.FLOAT, false, 0, 0);
+                    gl.enableVertexAttribArray(main_shader_program.in_texture_loc);
+
+                    model1_angle += 0.01;
+                    // fieldOfViewInRadians, aspect, near, far
+                    var proj = m4.perspective(57 * Math.PI / 180 , 
+                            canvas.clientWidth / canvas.clientHeight , 0.1 , 100);
+                    gl.uniformMatrix4fv(main_shader_program.u_proj_loc , false , proj);
+
+                    // view = T * R
+                    var view = m4.multiply(m4.yRotation(camera_yaw) ,  m4.xRotation(camera_pitch) );
+                    view = m4.multiply( m4.translation(camera_position[0] , camera_position[1] , camera_position[2]) , view );
+
+                    var vright = m4.vectorMultiply([1,0,0,0] , view);
+
+                    if (cvx != 0) {
+                        camera_position[0] += vright[0] * cvx;
+                        camera_position[1] += vright[1] * cvx;
+                        camera_position[2] += vright[2] * cvx;
+                    }
+
+                    var vforward = m4.vectorMultiply([0,0,-1,0] , view);
+
+                    if (cvz != 0) {
+                        camera_position[0] += vforward[0] * cvz;
+                        camera_position[1] += vforward[1] * cvz;
+                        camera_position[2] += vforward[2] * cvz;
+                    }
+
+                    view = m4.inverse(view);
+                    gl.uniformMatrix4fv(main_shader_program.u_view_loc , false , view);
+
+                    // T * R * S
+                    var model = m4.translation(model1_position[0] , model1_position[1] , model1_position[2]);
+                    model = m4.multiply(model, m4.xRotation(model1_angle));
+                    model = m4.multiply(model, m4.scaling(3 , 3 , 1));
+
+                    gl.uniformMatrix4fv(main_shader_program.u_model_loc , false , model);
+
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D , plane_texture);
+                    gl.uniform1i(main_shader_program.u_sampler_loc, 0);
+
+                    gl.drawArrays(gl.TRIANGLES,  0 , 6);
+
+
+                }
+
+                requestAnimationFrame(draw);
+            }
+
+        </script>
+
+    </body>
+</html>
