@@ -110,7 +110,7 @@
                     gl.bufferData(gl.ARRAY_BUFFER , new Float32Array(geometry.data.texcoord) , gl.STATIC_DRAW);
 
                     meshes.push({"vbo_position": vbo_position , "vbo_texture_coord" : vbo_texture_coord ,
-                                  "material" : geometry.material , "count_vertices" : geometry.data.position.length});
+                                  "material" : geometry.material , "count_vertices" : geometry.data.position.length / 3.0});
 
                 }
             }
