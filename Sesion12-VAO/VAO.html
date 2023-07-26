@@ -120,7 +120,7 @@
                     gl.vertexAttribPointer(main_shader_program.in_texture_loc, 2, gl.FLOAT, false, 0, 0);
                     gl.enableVertexAttribArray(main_shader_program.in_texture_loc);
 
-                    meshes.push({"vao" : vao, "material" : geometry.material , "count_vertices" : geometry.data.position.length});
+                    meshes.push({"vao" : vao, "material" : geometry.material , "count_vertices" : geometry.data.position.length / 3.0});
 
                     gl.bindVertexArray(null);
                 }
