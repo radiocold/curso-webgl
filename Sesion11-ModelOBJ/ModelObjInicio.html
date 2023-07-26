@@ -75,7 +75,14 @@
                     return;
                 }
 
+
+                // Agregamos colores para 6 vertices para que no de error en Firefox , en Chrome no dará problemas ya que realmente 
+                // no estamos utilizando colores ahora utilizamos coordenadas de textura en la formula final del fragment shader
                 var colors = new Float32Array([1 , 0, 0,
+                                               0 , 1, 0,
+                                               0 , 0, 1,
+
+                                               1 , 0, 0,
                                                0 , 1, 0,
                                                0 , 0, 1]);
                 
